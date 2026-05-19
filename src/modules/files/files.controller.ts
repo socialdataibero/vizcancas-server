@@ -142,9 +142,20 @@ export class FilesController {
 
   @Delete(':filename')
   @HttpCode(HttpStatus.NO_CONTENT)
-  deleteFile(@Param('filename') filename: string) {
+  async deleteFile(@Param('filename') filename: string) {
     if (!this.filesService.deleteFile(filename)) {
       throw new NotFoundException(`Archivo no encontrado: ${filename}`);
+    }
+    const baseName = path.basename(filename, path.extname(filename))
+      .replace(/[^a-zA-Z0-9_]/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .toLowerCase() || 'uploaded_data';
+    const tables = await this.duckdb.getTables();
+    const toDelete = tables.filter(
+      (t) => t === baseName || t.match(new RegExp(`^${baseName}_\\d+$`)),
+    );
+    for (const t of toDelete) {
+      await this.duckdb.dropTable(t);
     }
   }
 }
