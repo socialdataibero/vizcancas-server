@@ -10,10 +10,12 @@ import {
   Post,
   UploadedFile,
   UploadedFiles,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
+import { JwtAuthGuard } from '../../shared/auth/jwt-auth.guard';
 import * as fs from 'fs';
 import * as path from 'path';
 import { FilesService } from './files.service';
@@ -50,6 +52,9 @@ function extensionFilter(
 
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
 
+const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
+
+@UseGuards(JwtAuthGuard)
 @Controller('files')
 export class FilesController {
   constructor(
@@ -62,6 +67,7 @@ export class FilesController {
     FileInterceptor('file', {
       storage: buildStorage(UPLOADS_DIR),
       fileFilter: extensionFilter,
+      limits: { fileSize: MAX_FILE_SIZE },
     }),
   )
   async uploadOne(@UploadedFile() file: Express.Multer.File) {
@@ -99,6 +105,7 @@ export class FilesController {
     FilesInterceptor('files', 20, {
       storage: buildStorage(UPLOADS_DIR),
       fileFilter: extensionFilter,
+      limits: { fileSize: MAX_FILE_SIZE },
     }),
   )
   async uploadMany(@UploadedFiles() files: Express.Multer.File[]) {

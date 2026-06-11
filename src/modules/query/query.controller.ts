@@ -1,7 +1,9 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
 import { DuckdbService } from '../duckdb/duckdb.service';
 import { ExecuteQueryDto, ExecuteQueryLimitedDto } from './dto/execute-query.dto';
+import { JwtAuthGuard } from '../../shared/auth/jwt-auth.guard';
 
+@UseGuards(JwtAuthGuard)
 @Controller('query')
 export class QueryController {
   constructor(private readonly duckdb: DuckdbService) {}

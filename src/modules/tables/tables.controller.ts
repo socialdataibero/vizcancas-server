@@ -8,9 +8,11 @@ import {
   NotFoundException,
   Param,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { IsArray, IsBoolean, IsOptional, IsString } from 'class-validator';
 import { DuckdbService, ColumnInfo } from '../duckdb/duckdb.service';
+import { JwtAuthGuard } from '../../shared/auth/jwt-auth.guard';
 
 class ImportTableDto {
   @IsString()
@@ -23,6 +25,7 @@ class ImportTableDto {
   columns: ColumnInfo[];
 }
 
+@UseGuards(JwtAuthGuard)
 @Controller('tables')
 export class TablesController {
   constructor(private readonly duckdb: DuckdbService) {}
