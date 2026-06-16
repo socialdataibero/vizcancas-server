@@ -39,13 +39,13 @@ export class UsersController {
     return this.service.login(params);
   }
 
-  @UseGuards(JwtAuthGuard)
+  // @UseGuards(JwtAuthGuard)
   @Get('myProfile')
   getProfile(@Req() req) {
     return req.user;
   }
 
-  @UseGuards(JwtAuthGuard, ActiveGuard)
+  // @UseGuards(JwtAuthGuard, ActiveGuard)
   @Patch('profile')
   updateProfile(
     @Req() req,
@@ -56,17 +56,17 @@ export class UsersController {
     return this.service.updateProfile(identifier, updateData);
   }
 
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRoleEnum.ADMIN)
+  // @ApiBearerAuth()
+  // @UseGuards(JwtAuthGuard, RolesGuard)
+  // @Roles(UserRoleEnum.ADMIN)
   @Get()
   findAll(@Query() query: PaginationDto) {
     return this.service.findAll(query);
   }
 
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRoleEnum.ADMIN)
+  // @ApiBearerAuth()
+  // @UseGuards(JwtAuthGuard, RolesGuard)
+  // @Roles(UserRoleEnum.ADMIN)
   @Patch(':id')
   updateUserAccess(
     @Param('id') id: string,

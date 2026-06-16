@@ -18,7 +18,7 @@ export interface SuggestedMapFlow {
 
 @Injectable()
 export class AnalysisService {
-  constructor(private readonly duckdb: DuckdbService) {}
+  constructor(private readonly duckdb: DuckdbService) { }
 
   async getMapFlows(tableName?: string): Promise<SuggestedMapFlow[]> {
     const allTables = await this.duckdb.getTablesWithMeta();
@@ -135,7 +135,7 @@ export class AnalysisService {
     if (lt.includes('name') && rt.includes('name')) score += 8;
     if (lt.includes('code') && rt.includes('code')) score += 5;
     if ((left.role ?? inferColumnRole(left.name, left.type)) === 'join_key' &&
-        (right.role ?? inferColumnRole(right.name, right.type)) === 'join_key') score += 6;
+      (right.role ?? inferColumnRole(right.name, right.type)) === 'join_key') score += 6;
     return score;
   }
 

@@ -3,7 +3,7 @@ import { AiService } from './ai.service';
 import { AiChatDto } from './dto/ai-chat.dto';
 import { JwtAuthGuard } from '../../shared/auth/jwt-auth.guard';
 
-@UseGuards(JwtAuthGuard)
+// @UseGuards(JwtAuthGuard)
 @Controller('ai')
 export class AiController {
   constructor(private service: AiService) {}

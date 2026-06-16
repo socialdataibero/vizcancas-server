@@ -25,7 +25,7 @@ class ImportTableDto {
   columns: ColumnInfo[];
 }
 
-@UseGuards(JwtAuthGuard)
+// @UseGuards(JwtAuthGuard)
 @Controller('tables')
 export class TablesController {
   constructor(private readonly duckdb: DuckdbService) {}
