@@ -15,6 +15,7 @@ import {
 import { UsersService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
+import { CkanLoginDto } from './dto/ckan-login.dto';
 import { JwtAuthGuard } from 'src/shared/auth/jwt-auth.guard';
 import { ApiBearerAuth } from '@nestjs/swagger';
 import { RolesGuard } from 'src/shared/auth/guards/roles.guard';
@@ -37,6 +38,13 @@ export class UsersController {
     @Body(new ValidationPipe({ expectedType: LoginDto })) params: LoginDto,
   ) {
     return this.service.login(params);
+  }
+
+  @Post('ckan-sign-in')
+  ckanLogin(
+    @Body(new ValidationPipe({ expectedType: CkanLoginDto })) params: CkanLoginDto,
+  ) {
+    return this.service.ckanLogin(params);
   }
 
   // @UseGuards(JwtAuthGuard)

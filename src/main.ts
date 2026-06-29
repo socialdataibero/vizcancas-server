@@ -13,8 +13,11 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
+  const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000')
+    .split(',')
+    .map((o) => o.trim());
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: (origin, cb) => cb(null, !origin || allowedOrigins.includes(origin)),
     credentials: true,
   });
   app.setGlobalPrefix('api');

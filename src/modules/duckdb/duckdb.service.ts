@@ -383,6 +383,43 @@ export class DuckdbService implements OnModuleInit, OnModuleDestroy {
 
     return { columns: schema, rowCount: Number(countRows[0]?.['cnt'] ?? 0) };
   }
+
+  async importFromUrl(url: string, rawName: string, format: string, ckanToken?: string): Promise<{ tableName: string; rowCount: number }> {
+    const tableName = (rawName.replace(/[^a-zA-Z0-9_]/g, '_').substring(0, 60) || 'ckan_data');
+    const urlExt = url.split('?')[0].split('.').pop()?.toLowerCase() ?? '';
+    const resolvedFormat = urlExt === 'parquet' ? 'parquet' : (format === 'parquet' ? 'parquet' : 'csv');
+    const ext = resolvedFormat === 'parquet' ? 'parquet' : 'csv';
+    const tmpPath = path.join(process.cwd(), 'uploads', `__ckan_${Date.now()}.${ext}`);
+
+    const headers: Record<string, string> = {};
+    if (ckanToken) headers['Authorization'] = ckanToken;
+
+    const res = await fetch(url, { headers });
+    this.logger.log(`[importFromUrl] status=${res.status} content-type=${res.headers.get('content-type')} url=${url}`);
+    if (!res.ok) throw new BadRequestException(`No se pudo descargar el archivo desde CKAN: HTTP ${res.status}`);
+    const buffer = Buffer.from(await res.arrayBuffer());
+    fs.mkdirSync(path.join(process.cwd(), 'uploads'), { recursive: true });
+    fs.writeFileSync(tmpPath, buffer);
+
+    const safe = tableName.replace(/"/g, '""');
+    const safeTmp = tmpPath.replace(/\\/g, '/').replace(/'/g, "''");
+
+    try {
+      if (resolvedFormat === 'parquet') {
+        await this.runAsync(`CREATE OR REPLACE TABLE "${safe}" AS SELECT * FROM read_parquet('${safeTmp}')`);
+      } else {
+        await this.runAsync(`CREATE OR REPLACE TABLE "${safe}" AS SELECT * FROM read_csv('${safeTmp}', auto_detect=true, header=true)`);
+      }
+    } finally {
+      try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+    }
+
+    const countRows = await this.allAsync(`SELECT COUNT(*) AS cnt FROM "${safe}"`);
+    const rowCount = Number(countRows[0]?.['cnt'] ?? 0);
+    this.tableMeta.set(tableName, { fileType: resolvedFormat, originalName: rawName });
+    this.saveMeta();
+    return { tableName, rowCount };
+  }
 }
 
 // ─── Helpers (module-level) ──────────────────────────────────────────────────

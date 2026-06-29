@@ -4,11 +4,13 @@ import { Model } from "mongoose";
 import { User } from "./schemas/user.schema";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { LoginDto } from "./dto/login.dto";
+import { CkanLoginDto } from "./dto/ckan-login.dto";
 import { LoginResponse } from "./models/login-response.model";
 import { compare, hash } from "bcrypt";
 import { AuthService } from "src/shared/auth/auth.service";
 import { PaginationDto } from "src/shared/query/pagination.dto";
 import { UpdateUserAccessDto } from "./dto/update-user-access.dto";
+import { UserRoleEnum } from "./enums/user-role.enum";
 
 @Injectable()
 export class UsersService {
@@ -114,6 +116,61 @@ export class UsersService {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  async ckanLogin(dto: CkanLoginDto): Promise<LoginResponse> {
+    const { handoffToken, ckanUrl } = dto;
+
+    const base = ckanUrl.replace(/\/+$/, '');
+    const endpoint = `${base}/api/3/action/duckdb_consume_handoff`;
+
+    let ckanUser: { username: string; display_name: string; download_token: string };
+
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: handoffToken }),
+      });
+
+      const body = await res.json() as { success: boolean; result?: { username: string; display_name: string }; error?: { message?: string } };
+
+      if (!body.success || !body.result?.username) {
+        const msg = body.error?.message ?? 'Token de CKAN inválido o expirado';
+        throw new HttpException({ message: [msg] }, HttpStatus.UNAUTHORIZED);
+      }
+
+      ckanUser = {
+        username: body.result.username,
+        display_name: body.result.display_name,
+        download_token: (body.result as any).download_token ?? '',
+      };
+    } catch (err: any) {
+      if (err instanceof HttpException) throw err;
+      throw new HttpException(
+        { message: ['No se pudo conectar con CKAN'] },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    const payload = {
+      username: ckanUser.username,
+      role: UserRoleEnum.USER,
+      source: 'ckan' as const,
+    };
+
+    const token = this._authService.signPayload(payload);
+
+    return {
+      token,
+      ckanDownloadToken: ckanUser.download_token,
+      user: {
+        username: ckanUser.username,
+        name: ckanUser.display_name || ckanUser.username,
+        role: UserRoleEnum.USER,
+        isActive: true,
+      } as any,
+    };
   }
 
   async create(dto: CreateUserDto): Promise<User> {

@@ -20,6 +20,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
+    if (payload.source === 'ckan') {
+      return {
+        username: payload.username,
+        role: payload.role,
+        source: 'ckan',
+        isActive: true,
+      };
+    }
+
     const user = await this._authService.validateUser(payload);
 
     if (!user) {

@@ -25,6 +25,22 @@ class ImportTableDto {
   columns: ColumnInfo[];
 }
 
+class ImportFromUrlDto {
+  @IsString()
+  url: string;
+
+  @IsString()
+  tableName: string;
+
+  @IsString()
+  @IsOptional()
+  format?: string;
+
+  @IsString()
+  @IsOptional()
+  ckanToken?: string;
+}
+
 // @UseGuards(JwtAuthGuard)
 @Controller('tables')
 export class TablesController {
@@ -53,6 +69,12 @@ export class TablesController {
   @HttpCode(HttpStatus.OK)
   importTable(@Body() dto: ImportTableDto) {
     return this.duckdb.importTableData(dto.tableName, dto.rows, dto.columns);
+  }
+
+  @Post('import-from-url')
+  @HttpCode(HttpStatus.OK)
+  importFromUrl(@Body() dto: ImportFromUrlDto) {
+    return this.duckdb.importFromUrl(dto.url, dto.tableName, dto.format ?? 'csv', dto.ckanToken);
   }
 
   @Delete(':name')
