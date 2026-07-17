@@ -12,6 +12,7 @@ import {
   UseGuards,
   ValidationPipe,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { UsersService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
@@ -28,11 +29,14 @@ import { ActiveGuard } from 'src/shared/auth/guards/access.guard';
 @Controller('users')
 export class UsersController {
   constructor(private service: UsersService) { }
+
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post()
   create(@Body() dto: CreateUserDto) {
     return this.service.create(dto);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('sign-in')
   login(
     @Body(new ValidationPipe({ expectedType: LoginDto })) params: LoginDto,
@@ -40,6 +44,7 @@ export class UsersController {
     return this.service.login(params);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('ckan-sign-in')
   ckanLogin(
     @Body(new ValidationPipe({ expectedType: CkanLoginDto })) params: CkanLoginDto,
@@ -47,19 +52,18 @@ export class UsersController {
     return this.service.ckanLogin(params);
   }
 
-  // @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard)
   @Get('myProfile')
   getProfile(@Req() req) {
     return req.user;
   }
 
-  // @UseGuards(JwtAuthGuard, ActiveGuard)
+  @UseGuards(JwtAuthGuard)
   @Patch('profile')
   updateProfile(
     @Req() req,
     @Body() updateData: UpdateProfileDto
   ) {
-    console.log(updateData)
     const identifier = req.user.username;
     return this.service.updateProfile(identifier, updateData);
   }

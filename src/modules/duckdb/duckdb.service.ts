@@ -52,6 +52,7 @@ export interface TableMeta {
   fileSize?: number;
   fileType?: string;
   originalName?: string;
+  owners?: string[];
 }
 
 @Injectable()
@@ -65,12 +66,27 @@ export class DuckdbService implements OnModuleInit, OnModuleDestroy {
   private readonly metaPath = path.join(process.cwd(), 'data', 'meta.json');
   private tableMeta = new Map<string, TableMeta>();
 
-  onModuleInit(): void {
+  async onModuleInit(): Promise<void> {
     fs.mkdirSync(this.dataDir, { recursive: true });
     this.db = new duckdb.Database(this.dbPath);
     this.conn = this.db.connect();
     this.tableMeta = this.loadMeta();
     this.logger.log(`DuckDB inicializado con persistencia en ${this.dbPath}`);
+    await this.lockDownDatabase();
+  }
+
+  private async lockDownDatabase(): Promise<void> {
+    const uploadsDir = path.join(process.cwd(), 'uploads');
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    const safeUploads = uploadsDir.replace(/\\/g, '/').replace(/'/g, "''");
+    try {
+      await this.runAsync(`SET allowed_directories = ['${safeUploads}']`);
+      await this.runAsync(`SET enable_external_access = false`);
+      await this.runAsync(`SET lock_configuration = true`);
+      this.logger.log(`DuckDB sandbox ${uploadsDir}`);
+    } catch (err) {
+      this.logger.warn(`cannot set sandbox: ${(err as Error).message}`);
+    }
   }
 
   onModuleDestroy(): void {
@@ -209,10 +225,27 @@ export class DuckdbService implements OnModuleInit, OnModuleDestroy {
     return rows.map((r) => String(r['table_name']));
   }
 
-  async getTablesWithMeta(): Promise<
+  private isVisibleTo(tableName: string, username?: string): boolean {
+    if (!username) return true;
+    const owners = this.tableMeta.get(tableName)?.owners;
+    if (!owners || owners.length === 0) return true;
+    return owners.includes(username);
+  }
+
+  addTableOwner(tableName: string, username?: string): void {
+    if (!username) return;
+    const meta = this.tableMeta.get(tableName) ?? {};
+    const owners = meta.owners ?? [];
+    if (!owners.includes(username)) {
+      this.tableMeta.set(tableName, { ...meta, owners: [...owners, username] });
+      this.saveMeta();
+    }
+  }
+
+  async getTablesWithMeta(username?: string): Promise<
     Array<{ name: string; columns: ColumnInfo[]; rowCount: number; fileSize?: number; fileType?: string }>
   > {
-    const names = await this.getTables();
+    const names = (await this.getTables()).filter((name) => this.isVisibleTo(name, username));
     return Promise.all(
       names.map(async (name) => {
         const safe = name.replace(/"/g, '""');
@@ -297,21 +330,34 @@ export class DuckdbService implements OnModuleInit, OnModuleDestroy {
     return this.importTableData(tableName, rows, columns, meta);
   }
 
-  async dropTable(tableName: string): Promise<void> {
+  async dropTable(tableName: string, username?: string): Promise<void> {
+    if (!this.isVisibleTo(tableName, username)) {
+      throw new BadRequestException(`No tienes acceso a la tabla: ${tableName}`);
+    }
+    const owners = this.tableMeta.get(tableName)?.owners ?? [];
+    if (username && owners.length > 1) {
+      const meta = this.tableMeta.get(tableName)!;
+      this.tableMeta.set(tableName, { ...meta, owners: owners.filter((o) => o !== username) });
+      this.saveMeta();
+      return;
+    }
     const safe = tableName.replace(/"/g, '""');
     await this.runAsync(`DROP TABLE IF EXISTS "${safe}"`);
     this.tableMeta.delete(tableName);
     this.saveMeta();
   }
 
-  async clearAllTables(): Promise<void> {
-    const names = await this.getTables();
+  async clearAllTables(username?: string): Promise<void> {
+    const names = (await this.getTables()).filter((name) => {
+      if (!username) return true;
+      const owners = this.tableMeta.get(name)?.owners ?? [];
+      return owners.includes(username);
+    });
     for (const name of names) {
-      await this.dropTable(name);
+      await this.dropTable(name, username);
     }
   }
 
-  // Tables above this threshold are exported as schema-only to avoid JSON serialization limits.
   private static readonly INLINE_ROW_LIMIT = 100_000;
 
   async exportTableData(tableName: string): Promise<{
@@ -384,8 +430,17 @@ export class DuckdbService implements OnModuleInit, OnModuleDestroy {
     return { columns: schema, rowCount: Number(countRows[0]?.['cnt'] ?? 0) };
   }
 
-  async importFromUrl(url: string, rawName: string, format: string, ckanToken?: string): Promise<{ tableName: string; rowCount: number }> {
+  async importFromUrl(url: string, rawName: string, format: string, ckanToken?: string, username?: string): Promise<{ tableName: string; rowCount: number; skipped?: boolean }> {
     const tableName = (rawName.replace(/[^a-zA-Z0-9_]/g, '_').substring(0, 60) || 'ckan_data');
+    const existing = await this.getTables();
+    if (existing.includes(tableName)) {
+      this.addTableOwner(tableName, username);
+      const safeExisting = tableName.replace(/"/g, '""');
+      const countRows = await this.allAsync(`SELECT COUNT(*) AS cnt FROM "${safeExisting}"`);
+      this.logger.log(`[importFromUrl] "${tableName}" already exists — skipping download`);
+      return { tableName, rowCount: Number(countRows[0]?.['cnt'] ?? 0), skipped: true };
+    }
+
     const urlExt = url.split('?')[0].split('.').pop()?.toLowerCase() ?? '';
     const resolvedFormat = urlExt === 'parquet' ? 'parquet' : (format === 'parquet' ? 'parquet' : 'csv');
     const ext = resolvedFormat === 'parquet' ? 'parquet' : 'csv';
@@ -396,7 +451,7 @@ export class DuckdbService implements OnModuleInit, OnModuleDestroy {
 
     const res = await fetch(url, { headers });
     this.logger.log(`[importFromUrl] status=${res.status} content-type=${res.headers.get('content-type')} url=${url}`);
-    if (!res.ok) throw new BadRequestException(`No se pudo descargar el archivo desde CKAN: HTTP ${res.status}`);
+    if (!res.ok) throw new BadRequestException(`cannot download the file from CKAN: HTTP ${res.status}`);
     const buffer = Buffer.from(await res.arrayBuffer());
     fs.mkdirSync(path.join(process.cwd(), 'uploads'), { recursive: true });
     fs.writeFileSync(tmpPath, buffer);
@@ -416,13 +471,15 @@ export class DuckdbService implements OnModuleInit, OnModuleDestroy {
 
     const countRows = await this.allAsync(`SELECT COUNT(*) AS cnt FROM "${safe}"`);
     const rowCount = Number(countRows[0]?.['cnt'] ?? 0);
-    this.tableMeta.set(tableName, { fileType: resolvedFormat, originalName: rawName });
+    this.tableMeta.set(tableName, {
+      fileType: resolvedFormat,
+      originalName: rawName,
+      ...(username ? { owners: [username] } : {}),
+    });
     this.saveMeta();
     return { tableName, rowCount };
   }
 }
-
-// ─── Helpers (module-level) ──────────────────────────────────────────────────
 
 function normalizeDuckDBType(type: string): string {
   const t = (type ?? '').trim().toUpperCase();
@@ -449,7 +506,7 @@ type GeoFeature = {
   id?: unknown;
   properties?: Record<string, unknown> | null;
   geometry?: unknown;
-};
+  };
 
 function normalizeGeoData(
   parsed: unknown,

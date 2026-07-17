@@ -8,6 +8,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { IsArray, IsBoolean, IsOptional, IsString } from 'class-validator';
@@ -41,14 +42,14 @@ class ImportFromUrlDto {
   ckanToken?: string;
 }
 
-// @UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('tables')
 export class TablesController {
-  constructor(private readonly duckdb: DuckdbService) {}
+  constructor(private readonly duckdb: DuckdbService) { }
 
   @Get()
-  listTables() {
-    return this.duckdb.getTablesWithMeta();
+  listTables(@Req() req) {
+    return this.duckdb.getTablesWithMeta(req.user.username);
   }
 
   @Get(':name/schema')
@@ -67,27 +68,29 @@ export class TablesController {
 
   @Post('import')
   @HttpCode(HttpStatus.OK)
-  importTable(@Body() dto: ImportTableDto) {
-    return this.duckdb.importTableData(dto.tableName, dto.rows, dto.columns);
+  importTable(@Req() req, @Body() dto: ImportTableDto) {
+    return this.duckdb.importTableData(dto.tableName, dto.rows, dto.columns, {
+      owners: [req.user.username],
+    });
   }
 
   @Post('import-from-url')
   @HttpCode(HttpStatus.OK)
-  importFromUrl(@Body() dto: ImportFromUrlDto) {
-    return this.duckdb.importFromUrl(dto.url, dto.tableName, dto.format ?? 'csv', dto.ckanToken);
+  importFromUrl(@Req() req, @Body() dto: ImportFromUrlDto) {
+    return this.duckdb.importFromUrl(dto.url, dto.tableName, dto.format ?? 'csv', dto.ckanToken, req.user.username);
   }
 
   @Delete(':name')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async dropTable(@Param('name') name: string) {
+  async dropTable(@Req() req, @Param('name') name: string) {
     const tables = await this.duckdb.getTables();
-    if (!tables.includes(name)) throw new NotFoundException(`Tabla no encontrada: ${name}`);
-    await this.duckdb.dropTable(name);
+    if (!tables.includes(name)) throw new NotFoundException(`Table not found: ${name}`);
+    await this.duckdb.dropTable(name, req.user.username);
   }
 
   @Delete()
   @HttpCode(HttpStatus.NO_CONTENT)
-  clearAllTables() {
-    return this.duckdb.clearAllTables();
+  clearAllTables(@Req() req) {
+    return this.duckdb.clearAllTables(req.user.username);
   }
 }

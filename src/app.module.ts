@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { MongooseModule, MongooseModuleOptions } from '@nestjs/mongoose';
 import { ConfigModule } from './shared/config/config.module';
 import { ConfigService } from './shared/config/config.service';
@@ -11,10 +13,18 @@ import { DuckdbModule } from './modules/duckdb/duckdb.module';
 import { QueryModule } from './modules/query/query.module';
 import { TablesModule } from './modules/tables/tables.module';
 import { AnalysisModule } from './modules/analysis/analysis.module';
+import { CanvasesModule } from './modules/canvases/canvases.module';
 
 @Module({
   imports: [
-    DuckdbModule,     // @Global() — DuckdbService available everywhere
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: 60_000,
+        limit: 300,
+      },
+    ]),
+    DuckdbModule,
     SharedModule,
     ConfigModule,
     FilesModule,
@@ -23,6 +33,7 @@ import { AnalysisModule } from './modules/analysis/analysis.module';
     AnalysisModule,
     AiModule,
     UserModule,
+    CanvasesModule,
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (
@@ -41,6 +52,12 @@ import { AnalysisModule } from './modules/analysis/analysis.module';
         };
       },
     }),
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

@@ -8,12 +8,14 @@ import {
   NotFoundException,
   Param,
   Post,
+  Req,
   UploadedFile,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import { diskStorage } from 'multer';
 import { JwtAuthGuard } from '../../shared/auth/jwt-auth.guard';
 import * as fs from 'fs';
@@ -54,7 +56,7 @@ const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
 
-// @UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('files')
 export class FilesController {
   constructor(
@@ -62,6 +64,7 @@ export class FilesController {
     private readonly duckdb: DuckdbService,
   ) {}
 
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Post('upload')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -70,8 +73,8 @@ export class FilesController {
       limits: { fileSize: MAX_FILE_SIZE },
     }),
   )
-  async uploadOne(@UploadedFile() file: Express.Multer.File) {
-    if (!file) throw new BadRequestException('No se recibió ningún archivo');
+  async uploadOne(@Req() req, @UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('No file received');
 
     const ext = path.extname(file.originalname).toLowerCase().slice(1);
     const baseName = path.basename(file.originalname, path.extname(file.originalname))
@@ -85,7 +88,7 @@ export class FilesController {
       file.path,
       tableName,
       ext,
-      { fileSize: file.size, fileType: ext, originalName: file.originalname },
+      { fileSize: file.size, fileType: ext, originalName: file.originalname, owners: [req.user.username] },
     );
 
     return {
@@ -100,6 +103,7 @@ export class FilesController {
     };
   }
 
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Post('upload-many')
   @UseInterceptors(
     FilesInterceptor('files', 20, {
@@ -108,8 +112,8 @@ export class FilesController {
       limits: { fileSize: MAX_FILE_SIZE },
     }),
   )
-  async uploadMany(@UploadedFiles() files: Express.Multer.File[]) {
-    if (!files?.length) throw new BadRequestException('No se recibieron archivos');
+  async uploadMany(@Req() req, @UploadedFiles() files: Express.Multer.File[]) {
+    if (!files?.length) throw new BadRequestException('Not received any files');
 
     return Promise.all(
       files.map(async (file) => {
@@ -125,7 +129,7 @@ export class FilesController {
           file.path,
           tableName,
           ext,
-          { fileSize: file.size, fileType: ext, originalName: file.originalname },
+          { fileSize: file.size, fileType: ext, originalName: file.originalname, owners: [req.user.username] },
         );
 
         return {
