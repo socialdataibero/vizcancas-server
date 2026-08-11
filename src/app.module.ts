@@ -14,6 +14,7 @@ import { QueryModule } from './modules/query/query.module';
 import { TablesModule } from './modules/tables/tables.module';
 import { AnalysisModule } from './modules/analysis/analysis.module';
 import { CanvasesModule } from './modules/canvases/canvases.module';
+import { SharesModule } from './modules/shares/shares.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { CanvasesModule } from './modules/canvases/canvases.module';
     AiModule,
     UserModule,
     CanvasesModule,
+    SharesModule,
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (
