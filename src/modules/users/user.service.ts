@@ -124,7 +124,13 @@ export class UsersService {
     const base = ckanUrl.replace(/\/+$/, '');
     const endpoint = `${base}/api/3/action/duckdb_consume_handoff`;
 
-    let ckanUser: { username: string; display_name: string; download_token: string };
+    let ckanUser: {
+      username: string;
+      display_name: string;
+      download_token: string;
+      ibero_context: Record<string, unknown> | null;
+      canvas: Record<string, unknown> | null;
+    };
 
     try {
       const res = await fetch(endpoint, {
@@ -133,7 +139,17 @@ export class UsersService {
         body: JSON.stringify({ token: handoffToken }),
       });
 
-      const body = await res.json() as { success: boolean; result?: { username: string; display_name: string }; error?: { message?: string } };
+      const body = await res.json() as {
+        success: boolean;
+        result?: {
+          username: string;
+          display_name: string;
+          download_token?: string;
+          ibero_context?: Record<string, unknown> | null;
+          canvas?: Record<string, unknown> | null;
+        };
+        error?: { message?: string };
+      };
 
       if (!body.success || !body.result?.username) {
         const msg = body.error?.message ?? 'Token de CKAN inválido o expirado';
@@ -143,7 +159,9 @@ export class UsersService {
       ckanUser = {
         username: body.result.username,
         display_name: body.result.display_name,
-        download_token: (body.result as any).download_token ?? '',
+        download_token: body.result.download_token ?? '',
+        ibero_context: body.result.ibero_context ?? null,
+        canvas: body.result.canvas ?? null,
       };
     } catch (err: any) {
       if (err instanceof HttpException) throw err;
@@ -164,6 +182,8 @@ export class UsersService {
     return {
       token,
       ckanDownloadToken: ckanUser.download_token,
+      iberoContext: ckanUser.ibero_context,
+      canvas: ckanUser.canvas,
       user: {
         username: ckanUser.username,
         name: ckanUser.display_name || ckanUser.username,

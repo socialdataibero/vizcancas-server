@@ -15,6 +15,7 @@ import { TablesModule } from './modules/tables/tables.module';
 import { AnalysisModule } from './modules/analysis/analysis.module';
 import { CanvasesModule } from './modules/canvases/canvases.module';
 import { SharesModule } from './modules/shares/shares.module';
+import { IberoModule } from './modules/ibero/ibero.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { SharesModule } from './modules/shares/shares.module';
     UserModule,
     CanvasesModule,
     SharesModule,
+    IberoModule,
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (

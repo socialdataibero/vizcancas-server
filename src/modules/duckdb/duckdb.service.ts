@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as readline from 'readline';
 import * as path from 'path';
 import { feature as topoFeature } from 'topojson-client';
+import { assertEmbeddableSql } from '../query/read-only-sql';
 
 export interface ColumnInfo {
   name: string;
@@ -355,6 +356,18 @@ export class DuckdbService implements OnModuleInit, OnModuleDestroy {
     });
     for (const name of names) {
       await this.dropTable(name, username);
+    }
+  }
+
+  async exportQueryToParquet(sql: string): Promise<Buffer> {
+    assertEmbeddableSql(sql);
+    const tmpPath = path.join(process.cwd(), 'uploads', `__publish_${Date.now()}_${Math.random().toString(36).slice(2)}.parquet`);
+    const safeTmp = tmpPath.replace(/\\/g, '/').replace(/'/g, "''");
+    try {
+      await this.runAsync(`COPY (${sql}\n) TO '${safeTmp}' (FORMAT PARQUET)`);
+      return fs.readFileSync(tmpPath);
+    } finally {
+      fs.rmSync(tmpPath, { force: true });
     }
   }
 
